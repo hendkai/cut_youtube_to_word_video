@@ -1,4 +1,4 @@
-# 🎬 Word-Based Video Processing
+# 🎬 Word-Based Video Processing (not finished)
 
 ## 📝 Description
 This project comprises two main scripts: `cut_youtube_to_word_video.py` and `create_video.py`. `cut_youtube_to_word_video.py` is used to download YouTube videos, convert them into audio, transcribe speech to text, and then slice the videos based on individual spoken words. `create_video.py` allows creating a continuous video from individual word videos based on a given sentence.
