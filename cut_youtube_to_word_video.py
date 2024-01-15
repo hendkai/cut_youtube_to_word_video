@@ -13,14 +13,17 @@ import cv2
 from PIL import Image, ImageTk
 import tkinter as tk
 from tkinter import messagebox, font
+import threading
+
 
 # SQLite-Datenbank initialisieren
-def initialize_db(db_path='word_videos.db'):
+def initialize_db(db_path="word_videos.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Erstellen einer Tabelle, falls sie noch nicht existiert
-    cursor.execute('''
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS videos (
             id INTEGER PRIMARY KEY,
             word TEXT,
@@ -28,17 +31,24 @@ def initialize_db(db_path='word_videos.db'):
             duration_ms INTEGER,
             start_time REAL,
             end_time REAL,
-            rated BOOLEAN DEFAULT 0  -- Hinzugefügte Spalte zur Bewertungskennzeichnung
+            rated INTEGER DEFAULT -1  -- Geänderte Spalte zur Bewertungskennzeichnung
         )
-    ''')
+    """
+    )
+
     conn.commit()
     conn.close()
 
+
 # Bewertung in der Datenbank speichern
-def save_rating(word, file_name, rating, db_path='word_videos.db'):
+def save_rating(word, file_name, rating, db_path="word_videos.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute('UPDATE videos SET rated = ? WHERE word = ? AND file_name = ?', (rating, word, file_name))
+    # Setzt die Bewertung auf 1 für gut oder 0 für schlecht
+    cursor.execute(
+        "UPDATE videos SET rated = ? WHERE word = ? AND file_name = ?",
+        (rating, word, file_name),
+    )
     conn.commit()
     conn.close()
 
@@ -194,7 +204,7 @@ def recognize_speech_from_audio(audio_path, client):
     return list(words_with_timestamps.values())
 
 
-def cut_video_by_word(video_path, word, start_time, end_time, db_path='word_videos.db'):
+def cut_video_by_word(video_path, word, start_time, end_time, db_path="word_videos.db"):
     output_folder = "Wörter"
     word_folder = os.path.join(output_folder, word)
     if not os.path.exists(word_folder):
@@ -212,10 +222,13 @@ def cut_video_by_word(video_path, word, start_time, end_time, db_path='word_vide
         # Speichern der Videoinformationen in der SQLite-Datenbank
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute('''
+        cursor.execute(
+            """
             INSERT INTO videos (word, file_name, duration_ms, start_time, end_time)
             VALUES (?, ?, ?, ?, ?)
-        ''', (word, video_file_name, video_duration * 1000, start_time, end_time))
+        """,
+            (word, video_file_name, video_duration * 1000, start_time, end_time),
+        )
         conn.commit()
         conn.close()
 
@@ -379,6 +392,7 @@ def process_audio_for_clarity(audio_path):
     subprocess.run(command, check=True)
     return processed_audio_path
 
+
 def transcribe_and_verify_video(video_path, word, client):
     """Transkribiert das Video und überprüft, ob das spezifische Wort enthalten ist."""
     audio_path = extract_audio(video_path)
@@ -389,10 +403,11 @@ def transcribe_and_verify_video(video_path, word, client):
     words = recognize_speech_from_audio(audio_path, client)
     return any(w.lower() == word.lower() for w, _, _ in words)
 
-def delete_video_and_db_entry(word, file_name, db_path='word_videos.db'):
+
+def delete_video_and_db_entry(word, file_name, db_path="word_videos.db"):
     """Löscht das Video und den entsprechenden Datenbankeintrag."""
     video_path = os.path.join("Wörter", word, file_name)
-    
+
     # Überprüfen, ob die Videodatei existiert
     if os.path.exists(video_path):
         # Lösche die Videodatei
@@ -404,12 +419,15 @@ def delete_video_and_db_entry(word, file_name, db_path='word_videos.db'):
         cursor = conn.cursor()
 
         # Lösche den entsprechenden Eintrag aus der Datenbank
-        cursor.execute("DELETE FROM videos WHERE word = ? AND file_name = ?", (word, file_name))
+        cursor.execute(
+            "DELETE FROM videos WHERE word = ? AND file_name = ?", (word, file_name)
+        )
         conn.commit()
         conn.close()
         print(f"Eintrag für {word} in der Datenbank gelöscht.")
     else:
         print(f"Video {video_path} nicht gefunden.")
+
 
 # Funktion zur Bewertung eines Videos
 def rate_and_get_rating(video_path, word, video_file):
@@ -421,26 +439,34 @@ def rate_and_get_rating(video_path, word, video_file):
 
     return rating
 
+
 # Funktion zur Überprüfung, ob ein Video bereits bewertet wurde
-def is_video_rated(word, video_file, db_path='word_videos.db'):
+def is_video_rated(word, video_file, db_path="word_videos.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT rated FROM videos WHERE word = ? AND file_name = ?", (word, video_file))
+    cursor.execute(
+        "SELECT rated FROM videos WHERE word = ? AND file_name = ?", (word, video_file)
+    )
     result = cursor.fetchone()
     conn.close()
-    
+
     if result is not None:
         return bool(result[0])  # Gibt True zurück, wenn das Video bewertet wurde
     else:
         return False  # Gibt False zurück, wenn das Video nicht bewertet wurde oder nicht in der Datenbank existiert
-    
+
+
 # Funktion zum Speichern der Bewertung in der Datenbank
-def save_rating(word, video_file, rating, db_path='word_videos.db'):
+def save_rating(word, video_file, rating, db_path="word_videos.db"):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute('UPDATE videos SET rated = ? WHERE word = ? AND file_name = ?', (rating, word, video_file))
+    cursor.execute(
+        "UPDATE videos SET rated = ? WHERE word = ? AND file_name = ?",
+        (rating, word, video_file),
+    )
     conn.commit()
     conn.close()
+
 
 def process_videos():
     # Hier füge den Code zum Herunterladen, Zuschneiden und Extrahieren von Videos ein
@@ -459,6 +485,7 @@ def process_videos():
                 # Bewertung in der Datenbank speichern
                 save_rating(word, video_file, rating)
 
+
 def play_video(video_path, label):
     cap = cv2.VideoCapture(video_path)
 
@@ -472,15 +499,21 @@ def play_video(video_path, label):
             label.configure(image=imgtk)
             label.after(20, update_frame)
         else:
-            label.configure(image='')
+            label.configure(image="")
 
     update_frame()
 
+
 def play_video_in_vlc(video_path):
-    try:
-        subprocess.run(["vlc", video_path], check=True)
-    except Exception as e:
-        print(f"Fehler beim Starten von VLC: {e}")
+    def run_vlc():
+        try:
+            subprocess.Popen(["cvlc", video_path])
+        except Exception as e:
+            print(f"Fehler beim Starten von VLC: {e}")
+
+    thread = threading.Thread(target=run_vlc)
+    thread.start()
+
 
 def rate_video(word, video_path):
     # Erstellen eines neuen Fensters
@@ -489,22 +522,28 @@ def rate_video(word, video_path):
 
     # Überschrift für das Wort
     heading_font = font.Font(family="Helvetica", size=16, weight="bold")
-    heading_label = tk.Label(window, text=f"Wort zur Bewertung: {word}", font=heading_font)
+    heading_label = tk.Label(
+        window, text=f"Wort zur Bewertung: {word}", font=heading_font
+    )
     heading_label.pack()
 
     # Video in VLC abspielen
-    tk.Button(window, text="Video abspielen", command=lambda: play_video_in_vlc(video_path)).pack()
+    tk.Button(
+        window, text="Video abspielen", command=lambda: play_video_in_vlc(video_path)
+    ).pack()
 
     # Bewertungsbuttons
     def submit_rating(rating):
         print(f"Bewertung für {word} ({video_path}): {rating}")
-        # Hier können Sie die Bewertung in Ihrer Datenbank speichern
+        # Speichere die Bewertung in der Datenbank
+        save_rating(word, os.path.basename(video_path), rating)
         window.destroy()
 
-    tk.Button(window, text="Gut", command=lambda: submit_rating("Gut")).pack()
-    tk.Button(window, text="Schlecht", command=lambda: submit_rating("Schlecht")).pack()
+    tk.Button(window, text="Gut", command=lambda: submit_rating(1)).pack()
+    tk.Button(window, text="Schlecht", command=lambda: submit_rating(0)).pack()
 
-    window.mainloop()
+    window.mainloop()  # Dies blockiert die Ausführung, bis das Fenster geschlossen wird
+
 
 def main():
     url = "https://www.youtube.com/shorts/pes9pXYZTUI"
@@ -517,7 +556,9 @@ def main():
 
         audio_path = convert_audio_to_mono(video_path)
         if audio_path is None or not os.path.exists(audio_path):
-            print("Fehler beim Konvertieren des Audios oder die Audiodatei existiert nicht.")
+            print(
+                "Fehler beim Konvertieren des Audios oder die Audiodatei existiert nicht."
+            )
             return
 
         channels = check_audio_channels(audio_path)
@@ -530,7 +571,9 @@ def main():
         audio_length = get_audio_length(audio_path)
         estimated_costs = estimate_costs(audio_length)
         estimated_duration = estimate_duration(audio_length)
-        if not confirm_costs(f"Die geschätzten Kosten für die Bearbeitung betragen {estimated_costs:.2f} Euro und die geschätzte Dauer beträgt ca. {estimated_duration:.2f} Minuten."):
+        if not confirm_costs(
+            f"Die geschätzten Kosten für die Bearbeitung betragen {estimated_costs:.2f} Euro und die geschätzte Dauer beträgt ca. {estimated_duration:.2f} Minuten."
+        ):
             print("Kosten wurden nicht bestätigt. Verarbeitung abgebrochen.")
             return
 
@@ -542,22 +585,30 @@ def main():
         num_segments = len(segment_paths)
         for i, segment_path in enumerate(segment_paths):
             print(f"Verarbeite Segment {i+1}/{num_segments}: {segment_path}")
-            words_with_timestamps = recognize_speech_from_audio(segment_path, speech_client)
+            words_with_timestamps = recognize_speech_from_audio(
+                segment_path, speech_client
+            )
 
             for word, start_time, end_time in words_with_timestamps:
                 try:
                     cut_video_by_word(video_path, word, start_time, end_time)
                     video_file_path = os.path.join("Wörter", word, f"{word}.mp4")
                     if os.path.exists(video_file_path):
-                        if transcribe_and_verify_video(video_file_path, word, speech_client):
+                        if transcribe_and_verify_video(
+                            video_file_path, word, speech_client
+                        ):
                             print(f"Video für das Wort '{word}' bestätigt.")
                         else:
-                            print(f"Video für das Wort '{word}' enthält das Wort nicht. Wird entfernt.")
+                            print(
+                                f"Video für das Wort '{word}' enthält das Wort nicht. Wird entfernt."
+                            )
                             delete_video_and_db_entry(word, f"{word}.mp4")
                     else:
                         print(f"Video für das Wort '{word}' nicht gefunden.")
                 except Exception as e:
-                    print(f"Fehler beim Schneiden oder Überprüfen des Videos für das Wort '{word}': {e}")
+                    print(
+                        f"Fehler beim Schneiden oder Überprüfen des Videos für das Wort '{word}': {e}"
+                    )
                     continue
 
         base_folder = "Wörter"
@@ -570,6 +621,7 @@ def main():
 
     except Exception as e:
         print(f"Ein unerwarteter Fehler ist aufgetreten: {e}")
+
 
 if __name__ == "__main__":
     main()
