@@ -35,6 +35,16 @@ Portions of this project were developed with assistance from OpenAI's ChatGPT, p
 ## 💻 Installation and Execution
 (Here, include the steps for installation and how to run your scripts.)
 
+## 🛣️ Roadmap
+1. **Add Video Rating Model**: Implement a machine learning model to automatically rate the quality of word videos based on clarity and relevance. The model will also determine the ideal start and end times for each word segment, optimizing the accuracy of video slicing. To achieve this:
+   - Collect a dataset of word videos with annotations for quality, clarity, start, and end times.
+   - Train a supervised machine learning model, possibly a neural network, to predict these parameters.
+   - Integrate the model into the `cut_youtube_to_word_video.py` script to automatically adjust the slicing of videos.
+2. 
+3. 
+4. 
+5. 
+
 ---
 
 ⚠️ **Disclaimer**: This README is for illustrative purposes. Please adjust the content to fit your actual project's description and requirements.
