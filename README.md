@@ -1,50 +1,81 @@
-# 🎬 Word-Based Video Processing (not finished)
+# 🎬 Wort-Videos aus YouTube
 
-## 📝 Description
-This project comprises two main scripts: `cut_youtube_to_word_video.py` and `create_video.py`. `cut_youtube_to_word_video.py` is used to download YouTube videos, convert them into audio, transcribe speech to text, and then slice the videos based on individual spoken words. `create_video.py` allows creating a continuous video from individual word videos based on a given sentence.
+YouTube-Videos herunterladen, transkribieren, in **einzelne Wort-Videos** schneiden, per GUI bewerten und aus einem beliebigen Satz wieder zu einem Video zusammensetzen.
 
-## 🚀 How it Works
+Vollständig **lokal**: Transkription via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (Whisper) — keine Cloud-API, keine Kosten pro Minute.
 
-### 📹 cut_youtube_to_word_video.py
-- Downloads videos from YouTube.
-- Converts videos to audio format.
-- Utilizes Google Cloud Speech-to-Text API for transcribing audio recordings.
-- Slices the video into segments corresponding to individual words.
-- Stores information about the videos in an SQLite database.
+## 🚀 Setup
 
-### 🎞️ create_video.py
-- Creates a video from a given sentence by combining corresponding word videos.
-- Displays a list of available words with video files.
-- Allows the user to input a sentence to create a video from.
+```bash
+uv venv --python 3.12 .venv        # oder: python3.12 -m venv .venv
+uv pip install --python .venv/bin/python -r requirements.txt
+```
 
-## 🔒 License
-This project is currently not available under an open-source license. All rights reserved. The use, reproduction, or distribution of the code without express permission of the author is prohibited.
+Voraussetzungen: Python 3.10+, `ffmpeg`/`ffprobe` im PATH (Arch: `pacman -S ffmpeg`).
 
-## 🤖 Developer Note
-Portions of this project were developed with assistance from OpenAI's ChatGPT, particularly in scripting and troubleshooting.
+## 📋 Workflow
 
-## 📦 Requirements
-- Python 3
-- PyTube
-- MoviePy
-- Google Cloud Speech-to-Text API
-- SQLite3
-- OpenCV
-- Tkinter
+### 1. Video verarbeiten
 
-## 💻 Installation and Execution
-(Here, include the steps for installation and how to run your scripts.)
+```bash
+.venv/bin/python cut_youtube_to_word_video.py "https://www.youtube.com/watch?v=..." \
+    --model small --language de --max-per-word 3
+```
+
+- Download via **yt-dlp** (max. 1080p, MP4)
+- Transkription mit **Wort-Zeitstempeln** (Zeitstempel beziehen sich auf das gesamte Video → Schnitte stimmen exakt)
+- Pro Wort bis `--max-per-word` Clips, bevorzugt mit einer Dauer nahe 0,6 s
+- Clips landen in `Wörter/<wort>/<wort>_NNN.mp4`, der Index in `word_videos.db` (SQLite)
+
+Whisper-Modelle: `tiny` / `base` / `small` / `medium` / `large-v3` — je größer, desto genauer und langsamer. Das Modell wird beim ersten Start automatisch heruntergeladen.
+
+### 2. Clips bewerten (Tkinter-GUI)
+
+```bash
+.venv/bin/python rate_videos.py
+```
+
+Tastatur: `Leertaste` = abspielen (System-Player), `g` = gut, `s` = schlecht, `→` = überspringen.
+
+### 3. Satz → Video
+
+```bash
+.venv/bin/python create_video.py "hallo welt"            # oder interaktiv ohne Argument
+```
+
+Bevorzugt werden als **gut** bewertete Clips; als **schlecht** bewertete werden nie verwendet. Fehlende Wörter werden gemeldet. Ausgabe: `output/output_video.mp4`.
+
+## 📁 Struktur
+
+```
+wordvideos/            Kernmodul
+  config.py            Pfade & Bewertungs-Codes
+  db.py                SQLite-Index (Wörter, Clips, Bewertungen)
+  download.py          yt-dlp-Download
+  transcribe.py        faster-whisper + Wort-Auswahl
+  cutting.py           ffmpeg-Schnitt (frame-genau, neu kodiert)
+  assemble.py          Satz → Video (ffmpeg concat)
+cut_youtube_to_word_video.py   CLI: Video → Wort-Clips
+rate_videos.py                 Tkinter-Bewertungs-GUI
+create_video.py                Satz → Video
+```
+
+Pfade lassen sich per Umgebungsvariablen überschreiben: `WORTVIDEOS_WORDS_DIR`, `WORTVIDEOS_DOWNLOADS_DIR`, `WORTVIDEOS_OUTPUT_DIR`, `WORTVIDEOS_DB`.
+
+## 🗄️ Datenbank
+
+Tabelle `videos`: `word`, `file_name`, `duration_ms`, `start_time`, `end_time`, `rated` (`-1` unbewertet, `1` gut, `0` schlecht), `source_title`.
+
+## 🔒 Lizenz
+
+Keine Open-Source-Lizenz. Alle Rechte vorbehalten; Nutzung, Vervielfältigung oder Verbreitung des Codes nur mit ausdrücklicher Genehmigung des Autors.
 
 ## 🛣️ Roadmap
-1. **Add Video Rating Model**: Implement a machine learning model to automatically rate the quality of word videos based on clarity and relevance. The model will also determine the ideal start and end times for each word segment, optimizing the accuracy of video slicing. To achieve this:
-   - Collect a dataset of word videos with annotations for quality, clarity, start, and end times.
-   - Train a supervised machine learning model, possibly a neural network, to predict these parameters.
-   - Integrate the model into the `cut_youtube_to_word_video.py` script to automatically adjust the slicing of videos.
-2. 
-3. 
-4. 
-5. 
+
+1. Automatische Qualitätsbewertung der Wort-Clips (ML-Modell statt manueller GUI-Bewertung)
+2. Wort-Varianten aus mehreren Quellvideos deduplizieren
+3. Web-/TUI-Oberfläche für Satz → Video mit Live-Vorschau
 
 ---
 
-⚠️ **Disclaimer**: This README is for illustrative purposes. Please adjust the content to fit your actual project's description and requirements.
+⚠️ Nur für Videos verwenden, deren Nutzung (Lizenz/Fair Use) dies erlaubt.

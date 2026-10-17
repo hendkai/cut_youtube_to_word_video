@@ -1,58 +1,75 @@
+#!/usr/bin/env python3
+"""Video aus einem Satz zusammensetzen.
+
+Nutzung:
+    python create_video.py "Hallo Welt" [-o ausgabe.mp4]
+
+Ohne Satz-Argument: verfügbare Wörter anzeigen und interaktiv fragen.
+Bevorzugt werden als 'gut' bewertete Clips; 'schlecht' bewertete werden
+übersprungen.
+"""
+import argparse
 import os
-import moviepy.editor as mp
 
-def list_available_words():
-    input_dir = "Wörter"  # Pfad zum Hauptordner
+from wordvideos import config, db
+from wordvideos.assemble import create_video_from_sentence
 
-    # Überprüfen, ob es verfügbare Wörter (Unterordner) mit Videodateien gibt
-    available_words = []
-    for folder in os.listdir(input_dir):
-        folder_path = os.path.join(input_dir, folder)
-        if os.path.isdir(folder_path):
-            video_files = [f for f in os.listdir(folder_path) if f.endswith('.mp4')]
-            if video_files:
-                available_words.append(folder)
 
-    if available_words:
-        print("Verfügbare Wörter mit Videodateien:")
-        for word in available_words:
-            print(word)
-    else:
-        print("Es wurden keine verfügbaren Wörter mit Videodateien gefunden.")
+def list_available_words() -> None:
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT word,
+                   COUNT(*) AS total,
+                   SUM(rated = ?) AS good,
+                   SUM(rated = ?) AS bad
+            FROM videos
+            GROUP BY word
+            ORDER BY word
+            """,
+            (config.RATED_GOOD, config.RATED_BAD),
+        ).fetchall()
+    if not rows:
+        print("Keine Wort-Videos in der Datenbank. "
+              "Zuerst cut_youtube_to_word_video.py ausführen.")
+        return
+    print(f"{len(rows)} verfügbare Wörter:")
+    for row in rows:
+        marks = []
+        if row["good"]:
+            marks.append(f"{row['good']}x gut")
+        if row["bad"]:
+            marks.append(f"{row['bad']}x schlecht")
+        if row["total"] - (row["good"] or 0) - (row["bad"] or 0) > 0:
+            marks.append("unbewertet")
+        suffix = f" ({', '.join(marks)})" if marks else ""
+        print(f"  {row['word']}{suffix}")
 
-def create_video_from_sentence(sentence):
-    input_dir = "Wörter"  # Pfad zum Hauptordner
-    output_dir = "output"  # Ausgabeordner
 
-    # Tokenisieren Sie den Satz in Wörter
-    words = sentence.split()
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Satz → Wort-Video")
+    parser.add_argument("sentence", nargs="?", help="Der zusammensetzende Satz")
+    parser.add_argument("-o", "--output", help="Ausgabedatei (Standard: output/output_video.mp4)")
+    args = parser.parse_args()
 
-    videos = []
-    for word in words:
-        word_folder = os.path.join(input_dir, word)
-        video_files = [f for f in os.listdir(word_folder) if f.endswith('.mp4')]
-        video_files.sort()
+    db.init_db()
+    list_available_words()
 
-        if video_files:
-            # Nehmen Sie das erste Video im Ordner
-            video_path = os.path.join(word_folder, video_files[0])
-            videos.append(mp.VideoFileClip(video_path))
+    sentence = args.sentence or input("\nGib einen Satz ein: ").strip()
+    if not sentence:
+        print("Leerer Satz — nichts zu tun.")
+        return
 
-    if videos:
-        # Erstellen Sie ein Video aus den ausgewählten Videodateien
-        combined_video = mp.concatenate_videoclips(videos, method="compose")
+    output_path, missing = create_video_from_sentence(sentence, args.output)
 
-        # Speichern Sie das erstellte Video im Ausgabeordner
-        if not os.path.exists(output_dir):
-            os.makedirs(output_dir)
-        output_path = os.path.join(output_dir, "output_video.mp4")
-        combined_video.write_videofile(output_path, codec="libx264", fps=24)
+    if missing:
+        print(f"\nKein Video gefunden für: {', '.join(missing)}")
+    if output_path:
+        size_mb = os.path.getsize(output_path) / (1024 * 1024)
+        print(f"\nVideo erstellt: {output_path} ({size_mb:.1f} MB)")
+    elif not missing:
+        print("\nKeine bekannten Wörter im Satz.")
 
-        print(f"Video basierend auf dem Satz erstellt und im Ausgabeordner gespeichert: {output_path}")
-    else:
-        print("Für einige Wörter im Satz wurden keine Videos gefunden.")
 
 if __name__ == "__main__":
-    list_available_words()  # Liste der verfügbaren Wörter mit Videodateien anzeigen
-    user_input = input("Geben Sie einen Satz ein: ")
-    create_video_from_sentence(user_input)
+    main()
