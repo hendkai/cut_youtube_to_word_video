@@ -5,17 +5,21 @@ Nutzung:
     python cut_youtube_to_word_video.py URL [--model small] [--language de]
                                           [--max-per-word 3]
 
+Jeder Clip wird automatisch verifiziert: Die Fundstelle wird mit Kontext
+nachtranskribiert, die Wortgrenzen verfeinert, und das Padding auf die halbe
+Sprechpause zum Nachbarwort begrenzt. Nur bestätigte Cuts werden gespeichert.
+
 Danach: `python rate_videos.py` zum Bewerten, `python create_video.py` zum
 Zusammensetzen eines Satzes.
 """
 import argparse
 
-from wordvideos import config, cutting, db, download, transcribe
+from wordvideos import cutting, db, download, transcribe
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="YouTube-Video → Wort-Videos (faster-whisper, lokal)"
+        description="YouTube-Video → verifizierte Wort-Videos (faster-whisper, lokal)"
     )
     parser.add_argument("url", help="YouTube-URL (oder ytsearch…)")
     parser.add_argument("--model", default="small",
@@ -33,28 +37,53 @@ def main() -> None:
     print(f"Video: {title}\n      {video_path}")
 
     print(f"Transkribiere (Modell '{args.model}', Sprache '{args.language}') …")
-    words = transcribe.transcribe_words(
-        video_path, model_size=args.model, language=args.language,
-        device=args.device,
-    )
+    model = transcribe.build_model(args.model, device=args.device)
+    words = transcribe.transcribe_words(video_path, model=model,
+                                        language=args.language)
     print(f"{len(words)} Wort-Vorkommen erkannt.")
 
-    selected = transcribe.select_best_occurrences(words, args.max_per_word)
-    unique_words = len({word for word, _, _ in selected})
-    print(f"Schneide {len(selected)} Clips für {unique_words} Wörter …\n")
+    ranked = transcribe.rank_candidates(words)
+    print(f"Prüfe und schneide Clips für {len(ranked)} Wörter "
+          f"(max. {args.max_per_word} pro Wort) …\n")
 
-    for i, (word, start, end) in enumerate(selected, 1):
-        try:
-            file_name, duration = cutting.cut_word_clip(video_path, word, start, end)
-        except Exception as exc:  # einzelne Clips dürfen nicht alles abbrechen
-            print(f"[{i}/{len(selected)}] {word}: FEHLER ({exc})")
-            continue
-        db.insert_clip(word, file_name, int(duration * 1000), start, end, title)
-        print(f"[{i}/{len(selected)}] {word}: {file_name} ({duration:.2f}s)")
+    total_clips = 0
+    for word in sorted(ranked):
+        kept = 0
+        for approx_start, approx_end, idx in ranked[word]:
+            if kept >= args.max_per_word:
+                break
+            refined = transcribe.refine_with_context(
+                model, video_path, word, approx_start, approx_end,
+                language=args.language,
+            )
+            if refined is None:
+                continue  # nicht bestätigt → nächste Variante probieren
+            start, end = refined
+
+            # Padding durch Nachbarwörter begrenzen (halbe Sprechpause)
+            prev_end, next_start = transcribe.neighbor_bounds(words, idx)
+            pad_start = min(0.06, max(0.0, (start - prev_end) / 2))
+            pad_end = min(0.06, max(0.0, (next_start - end) / 2))
+
+            try:
+                file_name, duration = cutting.cut_word_clip(
+                    video_path, word, start, end,
+                    pad_start=pad_start, pad_end=pad_end,
+                )
+            except Exception as exc:  # einzelne Clips dürfen nicht alles abbrechen
+                print(f"  {word}: FEHLER ({exc})")
+                continue
+            db.insert_clip(word, file_name, int(duration * 1000), start, end, title)
+            kept += 1
+            total_clips += 1
+            print(f"  ✓ {word}: {file_name} ({duration:.2f}s)")
+        if kept == 0:
+            print(f"  ✗ {word}: keine bestätigte Variante gefunden")
 
     s = db.stats()
     print(
-        f"\nFertig. Insgesamt {s['total']} Clips für {s['words']} Wörter "
+        f"\nFertig. {total_clips} verifizierte Clips aus diesem Video; "
+        f"insgesamt {s['total']} Clips für {s['words']} Wörter "
         f"in der Datenbank ({s['unrated']} unbewertet)."
     )
     print("Als nächstes: python rate_videos.py")

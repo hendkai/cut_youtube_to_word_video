@@ -24,6 +24,7 @@ Voraussetzungen: Python 3.10+, `ffmpeg`/`ffprobe` im PATH (Arch: `pacman -S ffmp
 
 - Download via **yt-dlp** (max. 1080p, MP4)
 - Transkription mit **Wort-Zeitstempeln** (Zeitstempel beziehen sich auf das gesamte Video → Schnitte stimmen exakt)
+- **Automatische Verifikation pro Clip**: Die Fundstelle wird mit ±1,5 s Kontext nachtranskribiert (mit Kontext ist Whisper deutlich zuverlässiger), die Wortgrenzen werden verfeinert, und das Padding auf die halbe Sprechpause zum Nachbarwort begrenzt — so enthält kein Clip den Wortschwanz des Vorgängers. Unbestätigte Kandidaten werden verworfen und die nächste Variante des Worts probiert
 - Pro Wort bis `--max-per-word` Clips, bevorzugt mit einer Dauer nahe 0,6 s
 - Clips landen in `Wörter/<wort>/<wort>_NNN.mp4`, der Index in `word_videos.db` (SQLite)
 

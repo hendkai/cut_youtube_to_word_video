@@ -10,17 +10,20 @@ def cut_word_clip(
     word: str,
     start: float,
     end: float,
+    pad_start: float = 0.06,
+    pad_end: float = 0.06,
     words_dir: str | None = None,
-    padding: float = 0.06,
 ) -> tuple[str, float]:
-    """Schneidet [start, end] (+ padding) aus dem Quellvideo.
+    """Schneidet [start, end] (+ individuelle Padding-Begrenzung) aus dem
+    Quellvideo. Die Aufrufer begrenzen pad_start/pad_end auf die halbe
+    Sprechpause zum Nachbarwort, damit kein Wortschwanz mit in den Clip kommt.
 
     Legt den Clip unter <words_dir>/<wort>/<wort>_NNN.mp4 ab und gibt
     (Dateiname, Clip-Dauer in Sekunden) zurück.
     """
     words_dir = words_dir or config.WORDS_DIR
-    start = max(0.0, start - padding)
-    end = end + padding
+    start = max(0.0, start - pad_start)
+    end = end + pad_end
     duration = end - start
     if duration <= 0:
         raise ValueError(f"Ungültiger Zeitbereich für '{word}': {start:.2f}–{end:.2f}")
